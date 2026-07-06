@@ -65,11 +65,11 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
     public class IcbcController : Controller
     {
         private readonly IConfiguration _configuration;
-        private readonly ILogger<DriverHistoryController> _logger;
+        private readonly ILogger<IcbcController> _logger;
         private readonly IBackgroundTaskQueue _backgroundWorkerQueue;
         private readonly IServiceScopeFactory _serviceScopeFactory;
 
-        public IcbcController(ILogger<DriverHistoryController> logger, IConfiguration configuration, IServiceScopeFactory serviceScopeFactory, IBackgroundTaskQueue backgroundTaskQueue)
+        public IcbcController(ILogger<IcbcController> logger, IConfiguration configuration, IServiceScopeFactory serviceScopeFactory, IBackgroundTaskQueue backgroundTaskQueue)
         {
             _configuration = configuration;
             _logger = logger;
@@ -88,6 +88,8 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
         [SwaggerResponse(500, "An unexpected server error occurred while processing. Please retry.")]
         public ActionResult CreateCandidates([FromBody] List<NewCandidate> newCandidates)
         {
+            _logger.LogInformation("CreateCandidates request received. CandidateCount: {CandidateCount}", newCandidates?.Count ?? 0);
+
             _backgroundWorkerQueue.QueueBackgroundWorkItem(async token =>
             {
                 _logger.LogInformation("CreateCandidates background job started. CandidateCount: {CandidateCount}", newCandidates?.Count ?? 0);
