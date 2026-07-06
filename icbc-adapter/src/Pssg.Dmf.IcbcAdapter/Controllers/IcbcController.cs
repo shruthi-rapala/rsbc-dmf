@@ -90,6 +90,8 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
         {
             _backgroundWorkerQueue.QueueBackgroundWorkItem(async token =>
             {
+                _logger.LogInformation("CreateCandidates background job started. CandidateCount: {CandidateCount}", newCandidates?.Count ?? 0);
+
                 using var scope = _serviceScopeFactory.CreateScope();
                 var icbcClient = scope.ServiceProvider.GetRequiredService<IIcbcClient>();
                 var caseManagerClient = scope.ServiceProvider.GetRequiredService<CaseManager.CaseManagerClient>();
@@ -167,6 +169,7 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
                             if (candidateCreation != null)
                             {
                                 var caseId = caseManagerClient.GetCaseId(lcr.LicenseNumber, lcr.Surname);
+                                _logger.LogInformation("Created new case for DL {DlNumber}. CaseId: {CaseId}", lcr.LicenseNumber, caseId);
 
                                 // Create DMER envelope for the case
 
@@ -187,6 +190,8 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
                                     Owner = "Team - Intake"
                                 });
 
+                                _logger.LogInformation("Added ICBC DMER document envelope for new case.  DlNumber: {DlNumber}", lcr.LicenseNumber);
+
                                 // Create Comment
                                 caseManagerClient.CreateICBCMedicalCandidateComment(new LegacyComment()
                                 {
@@ -203,6 +208,8 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
                                     UserId = userId,
                                     Assignee = assignee
                                 });
+
+                                _logger.LogInformation("Created ICBC candidate comment for new case. DlNumber: {DlNumber}", lcr.LicenseNumber);
 
                             }
 
@@ -241,6 +248,8 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
                                     UserId = userId,
                                     Assignee = assignee
                                 });
+
+                                _logger.LogInformation("Created ICBC candidate comment for existing case. CaseId: {CaseId}, DlNumber: {DlNumber}", caseId, item.DlNumber);
                             }
                             else
                             {
@@ -269,6 +278,8 @@ namespace Rsbc.Dmf.IcbcAdapter.Controllers
                                     SequenceNumber = 1,
                                     Owner = "Team - Intake"
                                 });
+
+                                _logger.LogInformation("Added ICBC DMER document envelope for existing case. CaseId: {CaseId}, DlNumber: {DlNumber}", caseId, item.DlNumber);
                             }
                         }
 
