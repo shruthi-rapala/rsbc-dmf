@@ -497,7 +497,7 @@ namespace Rsbc.Dmf.IcbcAdapter
                 Log.Logger = new LoggerConfiguration()
                     .Enrich.FromLogContext()
                     .Enrich.WithExceptionDetails()
-                    .WriteTo.Console()
+                    .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
                     .WriteTo.EventCollector(Configuration["SPLUNK_COLLECTOR_URL"],
                         sourceType: "icbc-adapter", eventCollectorToken: Configuration["SPLUNK_TOKEN"],
                         restrictedToMinimumLevel: LogEventLevel.Information,
@@ -518,7 +518,7 @@ namespace Rsbc.Dmf.IcbcAdapter
                 Log.Logger = new LoggerConfiguration()
                     .Enrich.FromLogContext()
                     .Enrich.WithExceptionDetails()
-                    .WriteTo.Console()
+                    .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
                     .CreateLogger();
             }
             Log.Logger.Information("Icbc Adapter Container Started");

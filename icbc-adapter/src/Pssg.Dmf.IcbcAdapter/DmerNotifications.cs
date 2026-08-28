@@ -14,6 +14,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using static Pssg.DocumentStorageAdapter.DocumentStorageAdapter;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Rsbc.Dmf.IcbcAdapter
 {
@@ -22,7 +23,6 @@ namespace Rsbc.Dmf.IcbcAdapter
 		private readonly IConfiguration _configuration;
 		private readonly CaseManager.CaseManagerClient _caseManagerClient;
 		private readonly DocumentStorageAdapter.DocumentStorageAdapterClient _documentStorageAdapterClient;
-		private readonly IIcbcClient _icbcClient;
 		private readonly string _processedFolder;
         private readonly string _dmerFolder;
 
@@ -33,12 +33,10 @@ namespace Rsbc.Dmf.IcbcAdapter
 		public DmerNotifications(
 			IConfiguration configuration,
 			CaseManager.CaseManagerClient caseManagerClient,
-			IIcbcClient icbcClient,
 			DocumentStorageAdapter.DocumentStorageAdapterClient documentStorageAdapterClient)
 		{
 			_configuration = configuration;
 			_caseManagerClient = caseManagerClient;
-			_icbcClient = icbcClient;
 			_documentStorageAdapterClient = documentStorageAdapterClient;
 			_processedFolder = _configuration["DMER_PROCESSED_FOLDER"] ?? "dmer/proccessed";
 			_dmerFolder = _configuration["DMER_FOlDER"]?? "dmer";
@@ -52,14 +50,17 @@ namespace Rsbc.Dmf.IcbcAdapter
 				foreach (var notification in notifactions.NotificationFiles.Values)
 				{
 					var notifications = await ParseIcbcNotication(notification);
-					await CreateOrUpdateCases(notifications);
+					if (notifications != null)
+					{
+						await CreateOrUpdateCases(notifications.Records, notifications.Errors);
+					}
 				}
 
 				await MoveProcessedFilesToProcessedFolder(notifactions);
 			}
 		}
 
-		internal async Task CreateOrUpdateCases(List<DmerNotificationRecord> notifications)
+		internal async Task CreateOrUpdateCases(List<DmerNotificationRecord> notifications, int errors)
 		{
 			var dmerCases = notifications.Select(MapToDmerCase).ToList();
 
@@ -76,7 +77,7 @@ namespace Rsbc.Dmf.IcbcAdapter
 				DocumentOwner = "Team - Intake",
 				DocumentType = "DMER",
 				MedicalIssueDate = Timestamp.FromDateTime(dmerCase.MedicalIssueDate)
-            });
+            }, errors);
 		}
 
 		private DmerCaseRecord MapToDmerCase(DmerNotificationRecord source)
@@ -93,28 +94,39 @@ namespace Rsbc.Dmf.IcbcAdapter
 			};
 		}
 
-		internal async Task CreateOrUpdateCases(List<DmerCaseRecord> cases, Func<DmerCaseRecord, CreateDmerCaseRequest> caseMapper)
+		internal async Task CreateOrUpdateCases(List<DmerCaseRecord> cases, Func<DmerCaseRecord, CreateDmerCaseRequest> caseMapper, int errors)
 		{
-			try
+			var total = 0;
+			foreach (var item in cases)
 			{
-				var total = 0;
-				foreach (var item in cases)
+				try
 				{
 					var caseToCreate = caseMapper(item);
 
-					await _caseManagerClient.CreateDmerCaseAsync(caseToCreate);
+					var result = await _caseManagerClient.CreateDmerCaseAsync(caseToCreate);
+					var recordLog = new RecordTrackingLogs
+					{
+						FileId = Guid.NewGuid().ToString(),
+						RecordId = Guid.NewGuid().ToString(),
+						RecievedTime = DateTime.UtcNow,
+						ProcessedTime = DateTime.UtcNow,
+						Status = result.ResultStatus == DmerStatusReply.Types.DmerResultStatus.Success ? StatusTracking.Processed : StatusTracking.ProcessedWithErrors,
+						RecordDetails = result.ErrorDetail,
+						DrivingLicenseNumber = item.DriverLicenseNumber
+					};
 					total++;
 				}
-
-				Log.Logger.Information($"Successfully proccessed {total} DMER cases see cms logs for more details");
+				catch (Exception ex)
+				{
+                    errors++;
+                    Log.Logger.Error("Error processing DMER record in file: " + ex.Message);
+					
+				}
 			}
-			catch (Exception ex)
-			{
-				Log.Logger.Error("Error creating/updating DMER cases: " + ex.Message);
-			}
-		}
+            Log.Logger.Information($"Completed File Processing. Number of DMER records successfully proccessed: {total}. Number of DMER records with errors: {errors}. See cms logs for more details");
+        }
 
-		public async Task RemoveFilesFromIcbcS3Bucket(IEnumerable<string> ServerRelativeUrl)
+        public async Task RemoveFilesFromIcbcS3Bucket(IEnumerable<string> ServerRelativeUrl)
 		{
 			if (_documentStorageAdapterClient == null)
 			{
@@ -161,36 +173,28 @@ namespace Rsbc.Dmf.IcbcAdapter
 			}
 		}
 
-		private string BuildProcessedServerRelativeUrl(string sourceUrl)
+
+		public async Task<DMERParseResult> ParseIcbcNotication(IFormFile file)
 		{
-			var fileName = sourceUrl?
-				.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
-				.LastOrDefault();
+			var result = new DMERParseResult();
 
-			if (string.IsNullOrWhiteSpace(fileName))
+            Log.Logger.Information("Parsing DMER notification dat file " + file.FileName);
+
+            if (file == null || file.Length == 0)
 			{
-				fileName = $"dmer-{Guid.NewGuid():N}.dat";
+                Log.Logger.Information("File is empty or null.");
+				return null;
 			}
-
-			return $"{_processedFolder}/{fileName}";
-		}
-
-		public async Task<List<DmerNotificationRecord>> ParseIcbcNotication(IFormFile file)
-		{
-			Log.Logger.Information("Parsing DMER notification dat file...");
-			if (file == null || file.Length == 0)
-			{
-				throw new ArgumentException("File is empty or null.");
-			}
-
-			var records = new List<DmerNotificationRecord>();
-
+			result.Errors = 0;
+			result.Records = new List<DmerNotificationRecord>();
 			using (var reader = new StreamReader(file.OpenReadStream()))
 			{
 				string line;
+				int lineNumber = 0;
 				while ((line = await reader.ReadLineAsync()) != null)
 				{
-					if (string.IsNullOrWhiteSpace(line))
+                    lineNumber++;
+                    if (string.IsNullOrWhiteSpace(line))
 					{
 						continue;
 					}
@@ -219,16 +223,22 @@ namespace Rsbc.Dmf.IcbcAdapter
 					var validationErrors = ValidateRecord(record);
 					if (!string.IsNullOrEmpty(validationErrors))
 					{
-						Log.Logger.Warning("DMER record was not added: " + record + "\n Invalid values: " + validationErrors);
+						if (!line.Contains("RUN DATE"))
+						{
+							result.Errors++;
+
+							Log.Logger.Warning("Error parsing DMER Line Number: " + lineNumber + "\n Record: " + record + "\n Invalid values: " + validationErrors);
+						}
 					}
 					else
 					{
-						records.Add(record);
+						result.Records.Add(record);
 					}
+					
 				}
 			}
 
-			return records;
+			return result;
 		}
 
 		private static string Slice(string value, int start, int length)
@@ -246,14 +256,9 @@ namespace Rsbc.Dmf.IcbcAdapter
 		{
 			var errors = string.Empty;
 
-			if (string.IsNullOrWhiteSpace(record.Lnum) || record.Lnum.Contains(" "))
-			{
-				errors += "\nLNUM: " + record.Lnum;
-			}
-
 			if (string.IsNullOrWhiteSpace(record.MedicalType))
 			{
-				errors += "\nMDTP: " + record.MedicalType;
+				errors += "\nMedical Type: " + record.MedicalType;
 			}
 
 			return string.IsNullOrEmpty(errors) ? null : errors;
@@ -305,7 +310,7 @@ namespace Rsbc.Dmf.IcbcAdapter
 					var stream = new MemoryStream(fileBytes.Data.ToByteArray());
 					var fileName = fileBytes.ServerRelativeUrl.Split('/').Last();
 
-                    result.NotificationFiles[fileName] = new FormFile(stream, 0, stream.Length, "file", "DMER_Notifications")
+                    result.NotificationFiles[fileName] = new FormFile(stream, 0, stream.Length, "file", fileName)
 					{
 						Headers = new HeaderDictionary(),
 						ContentType = "application/octet-stream"
@@ -316,7 +321,47 @@ namespace Rsbc.Dmf.IcbcAdapter
 				return result;
 			}
 
-			return null;
+            return null;
 		}
+	}
+	public class FileTrackingLogs
+    {
+		public string FileId { get; set; }
+        public string FileName { get; set; }
+		public DateTime RecievedTime { get; set; }
+		public DateTime ProcessedTime { get; set; }
+        public StatusTracking Status { get; set; }
+		public FileTrackingType FileType { get; set; }
+        public string FileDetails { get; set; }
+    }
+
+	public class RecordTrackingLogs
+	{
+        public string FileId { get; set; }
+        public string RecordId { get; set; }
+        public DateTime RecievedTime { get; set; }
+        public DateTime ProcessedTime { get; set; }
+        public StatusTracking Status { get; set; }
+        public string RecordDetails { get; set; }
+		public string DrivingLicenseNumber { get; set; }
+    }
+
+
+    public enum FileTrackingType
+    {
+        DMER = 1,
+        Rehab = 2
+    }
+    public enum StatusTracking
+    {
+        Received = 1,
+        Processed = 2,
+        ProcessedWithErrors = 3
+    }
+
+	public class DMERParseResult
+	{
+		public List<DmerNotificationRecord> Records { get; set; }
+		public int Errors { get; set; }
 	}
 }

@@ -97,7 +97,7 @@ namespace Rsbc.Dmf.IcbcAdapter.Tests
             flatFileUtils = new FlatFileUtils(Configuration, CaseManagerClient);
 
             enhancedIcbcApiUtils = new EnhancedIcbcApiUtils(Configuration, CaseManagerClient, IcbcClient);
-            icbcNotifactionsUtils = new IcbcNotifactionsUtils(Configuration, CaseManagerClient, IcbcClient, DocumentStorageAdapterClient);
+            icbcNotifactionsUtils = new IcbcNotifactionsUtils(Configuration, CaseManagerClient, DocumentStorageAdapterClient);
         }
 
         /// <summary>
@@ -352,18 +352,18 @@ namespace Rsbc.Dmf.IcbcAdapter.Tests
         {
             var testRecords = await icbcNotifactionsUtils.ParseIcbcNotication(CreateTestFile());
 
-            Assert.Equal("01234567", testRecords[0].LNUM);
-            Assert.Equal("012345672", testRecords[0].CLNO);
-            Assert.Equal("SMITHENE", testRecords[0].SURNAME);
-            Assert.Equal("M", testRecords[0].GENDER);
-            Assert.Equal("CCC", testRecords[0].CAND_CAUSE_CD);
-            Assert.Equal("1996-02-26", testRecords[0].BIRTH_DT);
-            Assert.Equal("          ", testRecords[0].LIC_EXPIRY_DT);
-            Assert.Equal("2017-05-03", testRecords[0].LAST_EXAM_DT);
-            Assert.Equal("2017-05-03", testRecords[0].ADDR_DOCMNT_DT);
-            Assert.Equal("1", testRecords[0].MASTER_STATUS_CD);
-            Assert.Equal("500", testRecords[0].LIC_CLASS);
-            Assert.Equal("2025-06-11", testRecords[0].CAND_SENT_DT);
+            Assert.Equal("01234567", testRecords.Records[0].LNUM);
+            Assert.Equal("012345672", testRecords.Records[0].CLNO);
+            Assert.Equal("SMITHENE", testRecords.Records[0].SURNAME);
+            Assert.Equal("M", testRecords.Records[0].GENDER);
+            Assert.Equal("CCC", testRecords.Records[0].CAND_CAUSE_CD);
+            Assert.Equal("1996-02-26", testRecords.Records[0].BIRTH_DT);
+            Assert.Equal("          ", testRecords.Records[0].LIC_EXPIRY_DT);
+            Assert.Equal("2017-05-03", testRecords.Records[0].LAST_EXAM_DT);
+            Assert.Equal("2017-05-03", testRecords.Records[0].ADDR_DOCMNT_DT);
+            Assert.Equal("1", testRecords.Records[0].MASTER_STATUS_CD);
+            Assert.Equal("500", testRecords.Records[0].LIC_CLASS);
+            Assert.Equal("2025-06-11", testRecords.Records[0].CAND_SENT_DT);
         }
     }
 }
