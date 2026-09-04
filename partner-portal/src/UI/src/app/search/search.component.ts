@@ -31,9 +31,11 @@ import { finalize } from 'rxjs';
 })
 export class SearchComponent {
   driverLicenceNumber = '';
+  createDriverLicenceNumber = '';
   idCode = '';
   caseSurCode = '';
   noResults: boolean = false;
+  showCreateDriverForm: boolean = false;
   surcode = '';
   isSearching = false;
   driverSearchAttempted: boolean = false;
@@ -68,6 +70,7 @@ export class SearchComponent {
     
     this.searchExecuted = true;
     this.noResults = false;
+    this.showCreateDriverForm = false;
     this.isSearching = true;
 
     this.caseManagementService
@@ -101,6 +104,7 @@ export class SearchComponent {
 
     const effectiveCaseSurCode = this.caseSurCode.trim();
     this.noResults = false;
+    this.showCreateDriverForm = false;
     this.caseManagementService.searchByCaseId({
       idCode: this.idCode,
       surCode: effectiveCaseSurCode
@@ -118,6 +122,15 @@ export class SearchComponent {
       }
   
     });
+  }
+
+  openCreateDriverForm() {
+    this.createDriverLicenceNumber = this.driverLicenceNumber?.trim() || '';
+    this.showCreateDriverForm = true;
+  }
+
+  cancelCreateDriverForm() {
+    this.showCreateDriverForm = false;
   }
 }
 
