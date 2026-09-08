@@ -8,6 +8,7 @@ using AutoMapper;
 using Rsbc.Dmf.PartnerPortal.Api.Services;
 using static Rsbc.Dmf.CaseManagement.Service.CaseManager;
 using Rsbc.Dmf.CaseManagement.Service;
+using Google.Protobuf.WellKnownTypes;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -115,5 +116,80 @@ public class DriverController : Controller
     public ActionResult<UserContext> GetDriverSession()
     {
         return Json(_userService.GetDriverInfo());
+    }
+
+    [HttpPost("CreateDriver")]
+    [ProducesResponseType(typeof(Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse), (int)HttpStatusCode.OK)]
+    [ProducesResponseType((int)HttpStatusCode.BadRequest)]
+    [ProducesResponseType((int)HttpStatusCode.InternalServerError)]
+    [ActionName(nameof(CreateDriver))]
+    public async Task<ActionResult<Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse>> CreateDriver([FromBody] Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.DriverLicenceNumber))
+        {
+            return BadRequest(new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
+            {
+                Success = false,
+                Message = "Driver licence number is required."
+            });
+        }
+
+        try
+        {
+            var normalizedDriverLicenceNumber = request.DriverLicenceNumber.Trim();
+            var icbcReply = await _icbcAdapterClient.GetDriverInfoAsync(new DriverInfoRequest
+            {
+                DriverLicence = normalizedDriverLicenceNumber
+            }, forceRefresh: true);
+
+            if (icbcReply.ResultStatus != Rsbc.Dmf.IcbcAdapter.ResultStatus.Success)
+            {
+                return Ok(new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
+                {
+                    Success = false,
+                    Message = icbcReply.ErrorDetail ?? "Driver does not exist in ICBC."
+                });
+            }
+
+            var birthDate = DateTime.TryParse(icbcReply.BirthDate, out var parsedBirthDate)
+                ? Timestamp.FromDateTime(DateTime.SpecifyKind(parsedBirthDate, DateTimeKind.Utc))
+                : null;
+
+            var userContext = await _userService.GetCurrentUserContext();
+            var createReply = await _caseManagerClient.CreateDriverPersonAsync(new CreateDriverPersonRequest
+            {
+                DriverLicenseNumber = normalizedDriverLicenceNumber,
+                Surname = icbcReply.Surname ?? string.Empty,
+                GivenName = icbcReply.GivenName ?? string.Empty,
+                BirthDate = birthDate,
+                LoginId = userContext?.UserId ?? string.Empty
+            });
+
+            if (createReply.ResultStatus != Rsbc.Dmf.CaseManagement.Service.ResultStatus.Success)
+            {
+                return Ok(new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
+                {
+                    Success = false,
+                    Message = createReply.ErrorDetail ?? "Driver record creation failed.",
+                    DriverId = createReply.DriverId
+                });
+            }
+
+            return Ok(new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
+            {
+                Success = true,
+                Message = "Driver record created successfully.",
+                DriverId = createReply.DriverId
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"{nameof(CreateDriver)} failed.");
+            return StatusCode((int)HttpStatusCode.InternalServerError, new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
     }
 }

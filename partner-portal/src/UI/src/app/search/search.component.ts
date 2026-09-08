@@ -6,8 +6,6 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormField, MatError } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 import { Router } from '@angular/router';
-import { CaseSearch } from '@app/shared/api/models';
-import { DriverService } from '@app/shared/api/services';
 import { CaseManagementService } from '@app/shared/services/case-management/case-management.service';
 import { UserService } from '@app/shared/services/user.service';
 import { finalize } from 'rxjs';
@@ -38,9 +36,11 @@ export class SearchComponent {
   showCreateDriverForm: boolean = false;
   surcode = '';
   isSearching = false;
+  isCreatingDriver = false;
   driverSearchAttempted: boolean = false;
   caseSearchAttempted: boolean = false;
   searchExecuted: boolean = false;
+  createDriverMessage = '';
 
   constructor(
     private caseManagementService: CaseManagementService,
@@ -71,6 +71,7 @@ export class SearchComponent {
     this.searchExecuted = true;
     this.noResults = false;
     this.showCreateDriverForm = false;
+    this.createDriverMessage = '';
     this.isSearching = true;
 
     this.caseManagementService
@@ -105,6 +106,7 @@ export class SearchComponent {
     const effectiveCaseSurCode = this.caseSurCode.trim();
     this.noResults = false;
     this.showCreateDriverForm = false;
+    this.createDriverMessage = '';
     this.caseManagementService.searchByCaseId({
       idCode: this.idCode,
       surCode: effectiveCaseSurCode
@@ -126,11 +128,42 @@ export class SearchComponent {
 
   openCreateDriverForm() {
     this.createDriverLicenceNumber = this.driverLicenceNumber?.trim() || '';
+    this.createDriverMessage = '';
     this.showCreateDriverForm = true;
   }
 
   cancelCreateDriverForm() {
+    this.createDriverMessage = '';
     this.showCreateDriverForm = false;
+  }
+
+  createDriverRecord() {
+    const normalizedDriverLicenceNumber = this.createDriverLicenceNumber?.trim();
+    if (!normalizedDriverLicenceNumber || this.isCreatingDriver) {
+      return;
+    }
+
+    this.isCreatingDriver = true;
+    this.createDriverMessage = '';
+
+    this.caseManagementService
+      .createDriverRecord(normalizedDriverLicenceNumber)
+      .pipe(finalize(() => (this.isCreatingDriver = false)))
+      .subscribe({
+        next: (response) => {
+          this.createDriverMessage = response.message;
+
+          if (response.success) {
+            this.driverLicenceNumber = normalizedDriverLicenceNumber;
+            this.showCreateDriverForm = false;
+            this.noResults = false;
+          }
+        },
+        error: (error: unknown) => {
+          this.createDriverMessage = 'Driver record creation failed.';
+          console.error('Create driver error:', error);
+        }
+      });
   }
 }
 

@@ -103,11 +103,17 @@
                 </mat-form-field>
               </div>
               <div class="createDriverFormActions">
-                <button type="button" mat-stroked-button class="createDriverButton createDriverActionButton">Create Record</button>
+                <button type="button" mat-stroked-button class="createDriverButton createDriverActionButton" [disabled]="isCreatingDriver" (click)="createDriverRecord()">Create Record</button>
                 <button type="button" mat-stroked-button class="createDriverButton createDriverActionButton" (click)="cancelCreateDriverForm()">Cancel</button>
               </div>
             </div>
           }
+          }
+
+          @if(createDriverMessage){
+          <div class="createDriverResult">
+            {{ createDriverMessage }}
+          </div>
           }
 
           
