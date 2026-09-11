@@ -144,52 +144,38 @@ public class DriverController : Controller
 
             if (icbcReply.ResultStatus != Rsbc.Dmf.IcbcAdapter.ResultStatus.Success)
             {
-                return Ok(new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
-                {
-                    Success = false,
-                    Message = icbcReply.ErrorDetail ?? "Driver does not exist in ICBC."
-                });
+                return StatusCode((int)HttpStatusCode.InternalServerError, "Failed to get ICBC driver");
             }
 
             var birthDate = DateTime.TryParse(icbcReply.BirthDate, out var parsedBirthDate)
                 ? Timestamp.FromDateTime(DateTime.SpecifyKind(parsedBirthDate, DateTimeKind.Utc))
                 : null;
 
-            var userContext = await _userService.GetCurrentUserContext();
             var createReply = await _caseManagerClient.CreateDriverPersonAsync(new CreateDriverPersonRequest
             {
                 DriverLicenseNumber = normalizedDriverLicenceNumber,
                 Surname = icbcReply.Surname ?? string.Empty,
                 GivenName = icbcReply.GivenName ?? string.Empty,
                 BirthDate = birthDate,
-                LoginId = userContext?.UserId ?? string.Empty
+                LoginId = string.Empty
             });
 
             if (createReply.ResultStatus != Rsbc.Dmf.CaseManagement.Service.ResultStatus.Success)
             {
-                return Ok(new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
-                {
-                    Success = false,
-                    Message = createReply.ErrorDetail ?? "Driver record creation failed.",
-                    DriverId = createReply.DriverId
-                });
+                return StatusCode((int)HttpStatusCode.InternalServerError, "Failed to Create Driver.");
             }
 
             return Ok(new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
             {
                 Success = true,
-                Message = "Driver record created successfully.",
+                Message = "Driver record created successfully. You may search for driver again",
                 DriverId = createReply.DriverId
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, $"{nameof(CreateDriver)} failed.");
-            return StatusCode((int)HttpStatusCode.InternalServerError, new Rsbc.Dmf.PartnerPortal.Api.ViewModels.DriverCreateRecordResponse
-            {
-                Success = false,
-                Message = ex.Message
-            });
+            return StatusCode((int)HttpStatusCode.InternalServerError, "Failed to Create Driver.");
         }
     }
 }

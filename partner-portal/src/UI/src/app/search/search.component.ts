@@ -41,6 +41,8 @@ export class SearchComponent {
   caseSearchAttempted: boolean = false;
   searchExecuted: boolean = false;
   createDriverMessage = '';
+  private readonly createDriverSuccessMessage = 'Driver record created successfully. You may search for driver again';
+  private readonly createDriverFailureMessage = "Driver record creation failed. Please check the Driver's Licence number.";
 
   constructor(
     private caseManagementService: CaseManagementService,
@@ -150,17 +152,32 @@ export class SearchComponent {
       .createDriverRecord(normalizedDriverLicenceNumber)
       .pipe(finalize(() => (this.isCreatingDriver = false)))
       .subscribe({
-        next: (response) => {
-          this.createDriverMessage = response.message;
+        next: (response: { success?: boolean; Success?: boolean; message?: string; Message?: string }) => {
+          const isSuccess = response.success ?? response.Success ?? false;
+          const responseMessage = response.message ?? response.Message ?? this.createDriverFailureMessage;
 
-          if (response.success) {
+          if (isSuccess) {
+            this.createDriverMessage = this.createDriverSuccessMessage;
             this.driverLicenceNumber = normalizedDriverLicenceNumber;
             this.showCreateDriverForm = false;
             this.noResults = false;
+            return;
           }
+
+          this.createDriverMessage = responseMessage;
         },
-        error: (error: unknown) => {
-          this.createDriverMessage = 'Driver record creation failed.';
+        error: (error: { error?: { success?: boolean; Success?: boolean; message?: string; Message?: string } }) => {
+          const errorBody = error?.error;
+          const isSuccess = errorBody?.success ?? errorBody?.Success ?? false;
+          if (isSuccess) {
+            this.createDriverMessage = this.createDriverSuccessMessage;
+            this.driverLicenceNumber = normalizedDriverLicenceNumber;
+            this.showCreateDriverForm = false;
+            this.noResults = false;
+            return;
+          }
+
+          this.createDriverMessage = errorBody?.message ?? errorBody?.Message ?? this.createDriverFailureMessage;
           console.error('Create driver error:', error);
         }
       });
